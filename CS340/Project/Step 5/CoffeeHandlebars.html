@@ -1,0 +1,51 @@
+<html>
+<h3>Add new Coffee:</h3>
+<form id="addcoffee" action="/coffees" method="post">
+    Name: <input type="text" name="name"><br>
+    Origin: <select name="origin">
+		{{#each origin}}
+		<option value="{{id}}">{{country}}</option>
+		{{/each}}
+	</select><br>
+    Roaster: <select name="roaster">
+		{{#each roaster}}
+		<option value="{{id}}">{{name}}</option>
+		{{/each}}
+	</select><br>
+	Roast: <select name="roast">
+        {{#each roast}}
+        <option value="{{id}}">{{name}}</option>
+        {{/each}}
+    </select><br>
+	Variety: <select name="variety">
+        {{#each variety}}
+        <option value="{{id}}">{{name}}</option>
+        {{/each}}
+    </select><br>
+    <input type="submit" value="Submit">
+ </form>
+<br/>
+<h3>Current coffees:</h3>
+<table>
+    <thead>
+        <th>Name</th> 
+        <th>Origin</th> 
+        <th>Roaster</th>
+        <th>Roast</th>
+		<th>Variety</th>
+    </thead> 
+    <tbody> 
+        {{#each coffees}} 
+        <tr> 
+            <td>{{name}}</td> 
+            <td>{{origin}}</td> 
+            <td>{{roaster}}</td> 
+            <td>{{roast}}</td>
+			<td>{{variety}}</td>
+            <td><button onclick="deleteCoffee({{id}})">Delete</button></td>
+            <td><a href="/coffees/{{id}}">Update</a></td>
+        </tr> 
+        {{/each}} 
+    </tbody> 
+</table> 
+</html>
