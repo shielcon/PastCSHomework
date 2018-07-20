@@ -1,0 +1,460 @@
+#!/bin/bash
+
+tmp="transposed$$"
+added="added$$"
+transposed="TMPtp$$"
+
+#this trap statement uses *$$* as a catchall. Not all of the possible
+#tempfiles in this program are declared above, but since every tempfile
+#has a process ID, this ensures the proper cleanup in all situations
+
+trap "rm -f *$$*; echo 'SIGINT received: Deleting all temp files then exiting'; exit 1" INT
+
+
+#DIMS: A function that returns the dimensions of the provided matrix
+#Input: A matrix that meets the criteria of a valid matrix
+#Output: The number of rows, followed by the number of columns, of the input matrix
+
+dims(){
+
+#This series of contional statements verifies that there is exactly one input
+#matrix and that the file is readable
+
+if [ "$2" ]
+then
+	echo "Dims can only be performed on one matrix" 1>&2
+	exit 1
+fi
+
+if [ ! $1 ] 
+then
+	echo "No matrix provided" 1>&2
+	exit 1
+fi
+
+if [ ! -r $1 ]
+then
+	echo "The file is unreadable" 1>&2
+	exit 1
+fi
+
+#Steps through each row, incrementing
+#rows at each iteration. The result is
+#$rows, which is the total number of rows
+
+rows=0
+while read myLine
+do
+        rows=`expr $rows + 1`
+done < $1
+read line<$1
+
+#Only one line is required to calculate the
+#number of columns. The loop iterates through
+#each element in the line and increments
+#$cols at each step
+
+cols=0
+for i in $line
+do
+        cols=`expr $cols + 1`
+done
+
+#send the number of rows and number of
+#columns to stdout
+echo $rows $cols
+}
+
+#This is a helper function that also stores the resulting dimensions
+#in two variables. It doesn't require conditional checking, as the calling
+#functions will have already done that. This is the alternative to piping
+#the results of dims to the other functions, and I chose to use this helper
+#function because it feels easier and cleaner
+
+dimsHelper(){
+
+#Steps through each row, incrementing
+#rows at each iteration. The result is
+#$rows, which is the total number of rows
+rows=0
+while read myLine
+do
+        rows=`expr $rows + 1`
+done < $1
+read line<$1
+
+#Only one line is required to calculate the
+#number of columns. The loop iterates through
+#each element in the line and increments
+#$cols at each step
+cols=0
+for i in $line
+do
+        cols=`expr $cols + 1`
+done
+
+#nothing is printed to stdout. Instead, the row and col variables are
+#just saved for use by other functions
+
+}
+
+#TRANSPOSE: Takes a marix and turns each row into a column
+#Input: A matrix that meets the criteria of a valid matrix
+#Outupt: A matrix that looks like the original matrix, but rotated
+#90 degrees counter-clockwise. Each row is now a column, and row[i] is now
+#displayed as column[i]
+
+transpose(){
+
+#This series of conditional statements verifies that the input
+#file exists and is readable, and that there is exactly one matrix
+#input
+
+if [ ! $1 ]
+then
+        echo "No matrix provided" 1>&2
+        exit 1
+fi
+
+if [ ! -r $1 ]
+then
+        echo "The file is unreadable" 1>&2
+        exit 1
+fi
+
+if [ "$2" ]
+then
+        echo "Transpose can only be performed on one matrix" 1>&2
+        exit 1
+fi
+
+#calls dims helper to get the number of rows and columns in the matrix
+
+dimsHelper $1
+
+#Begins at index one of the input file, and cuts the column from that
+#index and stores the resulting line in a variable. The variable is then
+#ehoed to an ouput file.
+
+for i in `seq 1 $cols`
+do
+
+	string=$(cut -f $i $1)
+	echo $string | tr ' ' '\t'>>$tmp	#Each resulting line is now represented as a row, and passed to the temp file
+
+done
+
+#sends the contents of tmp to stdout
+cat $tmp
+rm -f $tmp
+
+}
+
+#MEAN: Returns the rounded average of each column in the input matrix
+#Input: An MxN matrix that meets the specifications of  a valid matrix
+#Output: A 1xN matrix that displays the rounded average of each column in the input matrix
+
+mean(){
+
+#This series of conditional statements verifies that there is
+#exactly one input file and that it is readable
+
+if [ ! $1 ]
+then
+        echo "No matrix provided" 1>&2
+        exit 1
+fi
+
+if [ ! -r $1 ]
+then
+        echo "The file is unreadable" 1>&2
+        exit 1
+fi
+
+if [ "$2" ]
+then
+        echo "Mean can only be performed on one matrix" 1>&2
+        exit 1
+fi
+
+#call the helper function to get the dimensions of the matrix
+
+dimsHelper $1
+
+
+lineMean=0	#used to store the mean of each individual column
+lineTotal=0	#used to store the sum of all numbers in each column
+
+#This loop extracts each column and stores
+#that column as a line in $line so that the
+#numbers can easily be iterated
+for i in `seq 1 $cols`
+do
+	#cuts each column of index i from the input file
+        line=$(cut -f $i $1)
+        lineTotal=0
+
+        #this loop generates the sum of each column
+        for number in $line
+        do
+                lineTotal=$(expr $lineTotal + $number)
+        done
+
+        #uses the provided formula to round properly - divides the sum
+        #of the columns by the total number of columns
+        lineMean=$((($lineTotal + ($rows / 2) * ($(($lineTotal>0)) * 2 - 1)) / $rows))
+        means="$means $lineMean"	#lineMean is added as a new line to the output matrix
+done
+
+#send the means to stdout, replacing all
+#spaces with tabs
+echo $means | tr ' ' '\t'
+
+
+}
+
+#ADD: Returns the sum of two matrices
+#Input: Takes as input two valid matrices
+#Output: The sum of both matrices
+
+add(){
+
+#This series of conditional statements verifies that
+#There are exactly two matrices and that they are readable
+
+if [[ ! $1 || ! $2 ]]
+then
+        echo "Add requires two matrices to be input" 1>&2
+        exit 1
+fi
+
+if [[ ! -r $1 || ! -r $2 ]]
+then
+        echo "Add requires valid matrices to be input" 1>&2
+        exit 1
+fi
+
+if [ "$3" ]
+then
+        echo "Add can only be performed on two matrices" 1>&2
+        exit 1
+fi
+
+#get the dimensions for the first matrix
+dimsHelper $1
+m1rows=$rows
+m1cols=$cols
+
+#additional temp files required for this function
+add1="add1$$"
+add2="add2$$"
+
+#get the dimensions for the second matrix. These don't
+#need to be renamed
+dimsHelper $2
+
+#This series of conditional statements verifies that
+#the two input matrices have the same dimensions
+
+if [ $m1rows -ne $rows ]
+then
+	echo "Cannot add: the input matrices have different dimensions" 1>&2
+	exit 1
+fi
+
+if [ $m1cols -ne $cols ]
+then
+        echo "Cannot add: the input matrices have different dimensions" 1>&2
+        exit 1
+fi
+
+#this loop continually overwrits the contents of
+#add1 and add2, temp files which just store one line
+#at a time for easy addition
+
+while 
+	read mat1 0<&3
+	read mat2 0<&4
+do
+	#places one row into $add1, one row
+	#into add2
+	echo $mat1 | tr ' ' '\t'>$add1
+	echo $mat2 | tr ' ' '\t'>$add2
+	line=""
+
+	#increments through each temp file, cutting
+	#the ith field from each and summing them together
+	for i in `seq 1 $cols`
+	do
+		a=$(cut -f $i $add1)
+		b=$(cut -f $i $add2)
+
+		#the result is stored in c and c is
+		#appended to $line
+
+		c=$(expr $a + $b)
+		line="$line $c"
+	done
+	echo $line | tr ' ' '\t'>>$added	#place the summed row in a new line in the final output
+done 3<$1 4<$2
+
+#send the contents of added to stdout
+
+cat $added
+rm -f $added $add1 $add2
+
+}
+
+#MULTIPLY: Returns the product matrix of two input matrix
+#Input: Two valid matrices
+#Output: A matrix representing the matrix multiplication product
+#of the two input matrices
+
+multiply(){
+
+#This series of conditionals ensures that there are
+#exactly 2 input files and that both files are readable
+
+if [[ ! $1 || ! $2 ]]
+then
+        echo "Multiply requires two matrices to be input" 1>&2
+        exit 1
+fi
+
+if [[ ! -r $1 || ! -r $2 ]]
+then
+        echo "Multiply requires valid matrices to be input" 1>&2
+        exit 1
+fi
+
+if [ "$3" ]
+then
+        echo "Multiply can only be performed on two matrices" 1>&2
+        exit 1
+fi
+
+#call dimsHelper twice to store the dimensions of
+#each matrix
+dimsHelper $1
+m1cols=$cols
+m1rows=$rows
+dimsHelper $2
+m2cols=$cols
+m2rows=$rows
+
+#verifies that the two matrices have
+#appropriate dimensions for multiplication
+
+if [ $m1cols -ne $m2rows ]
+then
+	echo "Can't multiply: the number of rows in matrix 1 must equal the number of columns in matrix 2" 1>&2
+	exit 1
+fi 
+
+#transposes the second matrix for
+#easier iteration later in the function
+
+transposed="TMPtp$$"
+transpose $2 > $transposed
+
+#additional temp files required for this function
+
+finalMatrix="TMP$$"
+thisRow="TMProw$$"
+thisCol="TMPcol$$"
+
+#This loop reads each row in the first matrix, then
+#multiplies that row by every row in the second matrix
+#to achieve the correct matrix multiplication. This is
+#why the second matrix was transposed previously. The 
+#second matrix can easily be iterated for multiplication
+#if it's columns are represented as rows in a temp file
+
+while read row
+do
+        line=""		#reset line at each iteration, so a new line can be created
+	
+	#store the current row from matrix A in a tempfile, so the values can be cut
+
+	echo $row | tr ' ' '\t'>$thisRow
+        while read column
+        do
+
+		#stores the current column from matrix B in a tempfile, so the values can be cut
+
+		echo $column | tr ' ' '\t'>$thisCol
+		sum=0
+
+		#cuts a field from each line for multiplication. O(n^3), here we go!
+
+		for i in `seq 1 $(expr $m2rows)`
+		do
+			a=$(cut -f $i $thisCol)
+			b=$(cut -f $i $thisRow)
+
+			#the product is the product of each field in the currnet lines. The
+			#sum is the sum of all products for every column * the current row.
+
+			product=$(expr $a \* $b)
+			sum=$(expr $sum + $product)
+		done
+
+		#the sum of products for each row is then appended to $line		
+
+		line="$line $sum"
+        done < $transposed
+
+	#send the current series of matrix multiplication sums
+	#in a new line to the final output matrix
+
+        echo $line | tr ' ' '\t'>>$finalMatrix
+done < $1
+
+#if your input matrices are each 150X150, then after 3 hours,
+#this line will finally execute, sending sending finalMatrix's
+#ghastly contents to stdout. For modestly-sized matrices though, 
+#you'll get here after a few minutes :)
+
+cat $finalMatrix
+
+rm -f $finalMatrix
+
+}
+
+#verifies that the specified function exists in this script
+
+if [[ $1 != "dims" && $1 != "mean" && $1 != "transpose" && $1 != "add" && $1 != "multiply" ]]
+then
+	echo "Not a valid function" 1>&2
+	exit 1
+fi
+
+#this uses the provided code from the reading material
+#to handle cases where a matrix is piped in. This is only
+#used in the case that dims, mean, or transpose is called
+
+if [[ $1 == "dims" || $1 == "mean" || $1 == "transpose" ]]
+then
+	datafilepath="datafile$$"
+	if [ "$#" = "1" ]
+	then
+    		cat > "$datafilepath"
+	elif [ "$#" = "2" ]
+	then
+    		datafilepath=$2
+	fi
+	$1 $datafilepath
+
+#handles the case that add or multiply are called
+
+else
+
+	$1 "${@:2}"
+
+fi
+
+
+#again, this removal accounts for any situation. All temp files have
+#a process ID, so they will all be destroyed by this line
+
+rm -f *$$*

@@ -1,0 +1,184 @@
+#!/bin/bash
+
+trap "rm -f *$$*; echo 'SIGINT received: Deleting all temp files then exiting'; exit 1" INT
+
+
+dims(){
+rows=0
+while read myLine
+do
+        rows=`expr $rows + 1`
+done < $1
+read line<$1
+cols=0
+for i in $line
+do
+        cols=`expr $cols + 1`
+done
+echo $rows $cols
+}
+
+
+dimsHelper(){
+rows=0
+while read myLine
+do
+        rows=`expr $rows + 1`
+done < $1
+read line<$1
+cols=0
+for i in $line
+do
+        cols=`expr $cols + 1`
+done
+}
+
+transpose(){
+
+dimsHelper $1
+tmp="transposed$$"
+
+for i in `seq 1 $cols`
+do
+
+	string=$(cut -f $i $1)
+	echo $string | tr ' ' '\t'>>$tmp
+
+done
+
+cat $tmp
+rm $tmp
+
+}
+
+mean(){
+
+dimsHelper $1
+
+
+lineMean=0
+lineTotal=0
+
+#This loop extracts each column and stores
+#that column as a line in $line so that the
+#numbers can easily be iterated
+for i in `seq 1 $cols`
+do
+        line=$(cut -f $i $1)
+        lineTotal=0
+
+        #this loop generates the sum of each column
+        for number in $line
+        do
+                lineTotal=$(expr $lineTotal + $number)
+        done
+
+        #uses the provided formula to round properly - divides the sum
+        #of the columns by the total number of columns
+        lineMean=$((($lineTotal + ($rows / 2) * ($(($lineTotal>0)) * 2 - 1)) / $rows))
+        means="$means $lineMean"
+done
+echo $means | tr ' ' '\t'
+
+
+}
+
+add(){
+
+dimsHelper $1
+m1rows=$rows
+m1cols=$cols
+added="added$$"
+add1="add1$$"
+add2="add2$$"
+dimsHelper $2
+
+if [ $m1rows -ne $rows ]
+then
+	echo "Cannot add: the input matrices have different dimensions" 1>&2
+	exit 1
+fi
+
+if [ $m1cols -ne $cols ]
+then
+        echo "Cannot add: the input matrices have different dimensions" 1>&2
+        exit 1
+fi
+
+
+while 
+	read mat1 0<&3
+	read mat2 0<&4
+do
+	echo $mat1 | tr ' ' '\t'>$add1
+	echo $mat2 | tr ' ' '\t'>$add2
+	line=""
+	for i in `seq 1 $cols`
+	do
+		a=$(cut -f $i $add1)
+		b=$(cut -f $i $add2)
+		c=$(expr $a + $b)
+		line="$line $c"
+	done
+	echo $line | tr ' ' '\t'>>$added
+done 3<$1 4<$2
+cat $added
+rm -f $added
+
+}
+
+multiply(){
+
+dimsHelper $1
+m1cols=$cols
+m1rows=$rows
+dimsHelper $2
+m2cols=$cols
+m2rows=$rows
+
+if [ $m1cols -ne $m2rows ]
+then
+	echo "Can't multiply: the number of rows in matrix 1 must equal the number of columns in matrix 2" 1>&2
+	exit 1
+fi 
+
+transposed="TMPtp$$"
+transpose $2 > $transposed
+
+
+rowColSum=0
+string=""
+finalMatrix="TMP$$"
+thisRow="TMProw$$"
+thisCol="TMPcol$$"
+j=0
+while read row
+do
+	j=$(expr $j + 1)
+        line=""
+	echo $row | tr ' ' '\t'>$thisRow
+        while read column
+        do
+		echo $column | tr ' ' '\t'>$thisCol
+		sum=0
+		for i in `seq 1 $(expr $m2rows)`
+		do
+			a=$(cut -f $i $thisCol)
+			b=$(cut -f $i $thisRow)
+			product=$(expr $a \* $b)
+			sum=$(expr $sum + $product)
+		done
+		line="$line $sum"
+        done < $transposed
+        echo $line | tr ' ' '\t'>>$finalMatrix
+done < $1
+
+
+cat $finalMatrix
+rm -f *$$*
+
+}
+
+
+$1 "${@:2}"
+rm -f *$$*

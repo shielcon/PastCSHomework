@@ -1,0 +1,264 @@
+#!/bin/bash
+
+dims(){
+rows=0
+while read myLine
+do
+	rows=`expr $rows + 1`
+done < $1
+read line<$1
+cols=0
+for i in $line
+do
+	cols=`expr $cols + 1`
+done
+echo "$rows $cols"
+}
+
+dimsHelper(){
+rows=0
+while read myLine
+do
+        rows=`expr $rows + 1`
+done < $1
+read line<$1
+cols=0
+for i in $line
+do
+        cols=`expr $cols + 1`
+done
+}
+
+transpose(){
+
+dimsHelper $1
+
+tempCol="tempcolfile"
+string=""
+for i in `seq 1 $cols`
+do
+	while read myLine
+	do
+		tempLine="templinefile"
+		echo $myLine>>$tempLine	
+		cut -d " " -f $i $tempLine>$tempCol
+		read line<$tempCol
+		string="$string $line"	
+		rm $tempLine
+	done < $1
+	echo "$string \n"
+	string=""
+done
+rm $tempCol
+}
+
+mean(){
+
+dimsHelper $1
+
+means=""
+lineMean=0
+
+
+while read myLine
+do
+	for i in $myLine
+	do
+		lineMean=`expr $lineMean + $i`
+	done
+	if [ "$lineMean" -lt 0 ]
+	then
+		lineMean=$((lineMean / cols))
+	else
+		lineMean=`expr $((lineMean / cols)) + 1`
+	fi
+	means="$means $lineMean"	
+	lineMean=0
+done < $1
+echo $means
+}
+
+add(){
+dimsHelper $1
+added=0
+total=`expr $rows \* $cols`
+i=0
+while read -r line
+do
+	for j in $line
+	do	
+		arr1[$i]=$j
+		i=$(expr $i + 1)
+	done	
+
+done < $1
+i=0
+while read -r line
+do
+	for j in $line
+	do
+        	arr2[$i]=$j
+		i=$(expr $i + 1)	
+	done
+done < $2
+
+for i in `seq 0 $(expr $total - 1)`
+do
+	sums[$i]=$(expr ${arr1[$i]} + ${arr2[$i]})
+done
+
+j=0
+line=""
+summed="summedMatrix"
+for i in ${sums[@]}
+do
+	line="$line $i"
+	j=$(expr $j + 1)
+
+        if [ $j -eq $cols ]
+        then
+                echo "$line\n">>$summed
+                j=0
+                line=""
+        fi
+done
+
+cat $summed
+rm $summed
+}
+
+multiply(){
+
+dimsHelper $1
+m1cols=$cols
+m1rows=$rows
+dimsHelper $2
+m2cols=$cols
+m2rows=$rows
+
+i=1
+
+#this loop generates each line of the first file
+#into individual files, so those lines can later
+#be stored in an array
+while read myLine
+do
+
+	matrixAFiles[$i]="TMP$$$i"
+	echo $myLine>>${matrixAFiles[$i]}
+	i=$(expr $i + 1)
+
+done < $1
+
+#this loop does the same as above, but transforms
+#each column of the second matrix into a line, so 
+#it can more easily be placed into an array
+tempCol="tempcolfile"
+string=""
+for i in `seq 1 $m2cols`
+do
+        while read myLine
+        do
+                tempLine="templinefile"
+                echo $myLine>>$tempLine
+                cut -d " " -f $i $tempLine>$tempCol
+                read line<$tempCol
+                string="$string $line"
+                rm $tempLine
+        done < $2
+	matrixBFiles[$i]="TMP2$$$i"
+        echo $string>>${matrixBFiles[$i]}
+        string=""
+done
+rm $tempCol
+
+for i in `seq 1 $m1rows`
+do
+	while read -r line
+	do
+
+		k=0
+		for j in $line
+		do
+			colArr[$k]=$j
+			k=$(expr $k + 1)
+		done
+		echo "collarr: ${colArr[@]}"
+
+		for j in `seq 1 $m1rows`
+		do
+			while read -r rowLine
+			do
+				k=0
+				for p in $rowLine
+				do
+					rowArr[$k]=$p
+					k=$(expr $k + 1)
+				done
+
+				product=0
+				for t in `seq 0 $(expr $m1cols - 1)`
+				do
+					product=$(expr $product + $(expr ${rowArr[$t]} \* ${colArr[$t]}))
+				done
+				allProducts="$allProducts $product"
+
+
+			done < ${matrixBFiles[$j]}
+		done
+	done < ${matrixAFiles[$i]}
+
+done
+
+echo "all products: $allProducts"
+
+j=0
+productMatrix="TMP$$"
+for i in $allProducts
+do
+        line="$line $i"
+        j=$(expr $j + 1)
+
+        if [ $j -eq $m1rows ]
+        then
+                echo "$line\n">>$productMatrix
+                j=0
+                line=""
+        fi
+done
+
+cat $productMatrix
+rm $productMatrix
+
+
+for i in ${matrixAFiles[@]}
+do
+rm $i
+done
+for i in ${matrixBFiles[@]}
+do
+rm $i
+done
+
+}
+
+
+
+
+
+
+if [ $3 != "" ]
+then
+	$1 $2 $3
+else
+	$1 $2
+fi
+
+
+
+
+
+
+
+
+
